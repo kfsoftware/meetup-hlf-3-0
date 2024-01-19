@@ -316,9 +316,6 @@ kubectl hlf ordnode create --image=$ORDERER_IMAGE --version=$ORDERER_VERSION \
     --enroll-pw=ordererpw --capacity=2Gi --name=ord-node2 --ca-name=ord-ca.default \
     --hosts=orderer1-ord.localho.st --admin-hosts=admin-orderer1-ord.localho.st --istio-port=443
 
-# channel participation api
-
-
 kubectl hlf ordnode create --image=$ORDERER_IMAGE --version=$ORDERER_VERSION \
     --storage-class=$STORAGE_CLASS --enroll-id=orderer --mspid=OrdererMSP \
     --enroll-pw=ordererpw --capacity=2Gi --name=ord-node3 --ca-name=ord-ca.default \
@@ -644,12 +641,12 @@ cat << METADATA-EOF > "metadata.json"
     "label": "${CHAINCODE_LABEL}"
 }
 METADATA-EOF
-## chaincode as a service
 ```
 
 ### Prepare connection file
 
 ```bash
+## chaincode as a service
 cat > "connection.json" <<CONN_EOF
 {
   "address": "${CHAINCODE_NAME}:7052",
@@ -734,7 +731,8 @@ We will use the kubectl plugin to interact with the chaincode. The plugin is a w
 kubectl hlf chaincode invoke --config=org1.yaml \
     --user=org1-admin-default --peer=org1-peer0.default \
     --chaincode=asset --channel=demo \
-    --fcn=initLedger -a '[]'
+    --fcn=initLedger
+
 ```
 
 ## 13. Query assets in the channel
