@@ -189,10 +189,10 @@ To install helm: [https://helm.sh/docs/intro/install/](https://helm.sh/docs/intr
 ```bash
 helm repo add kfs https://kfsoftware.github.io/hlf-helm-charts --force-update
 
-helm upgrade --install hlf-operator --version=1.10.0-beta4 -- kfs/hlf-operator
+helm upgrade --install hlf-operator --version=1.11.0-beta3 -- kfs/hlf-operator
 
-make generate manifests install
 ```
+
 
 ### Install the Kubectl plugin
 
@@ -245,7 +245,7 @@ kubectl hlf ca register --name=org1-ca --user=peer --secret=peerpw --type=peer \
 
 ```
 
-### Deploy a peer
+### Deploy a peer 
 
 ```bash
 
@@ -555,6 +555,7 @@ ${ORDERER2_TLS_CERT}
 ${ORDERER2_TLS_CERT}
 
 EOF
+
 ```
 
 ## 7. Join peer to the channel
@@ -744,6 +745,24 @@ kubectl hlf chaincode query --config=org1.yaml \
     --user=org1-admin-default --peer=org1-peer0.default \
     --chaincode=asset --channel=demo \
     --fcn=GetAllAssets -a '[]'
+```
+
+# 13.1 Create an asset
+
+Create an asset
+```bash
+kubectl hlf chaincode invoke --config=org1.yaml \
+    --user=org1-admin-default --peer=org1-peer0.default \
+    --chaincode=asset --channel=demo \
+    --fcn=CreateAsset -a "asset7" -a blue -a "5" -a "tom" -a "100"
+```
+# 13.2 Query the asset
+Query the asset we just created
+```bash
+kubectl hlf chaincode query --config=org1.yaml \
+    --user=org1-admin-default --peer=org1-peer0.default \
+    --chaincode=asset --channel=demo \
+    --fcn=ReadAsset -a asset7
 ```
 
 ## 14. Completion
