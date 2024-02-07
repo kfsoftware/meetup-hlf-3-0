@@ -141,6 +141,8 @@ EOF
 
 ### Configure Internal DNS
 
+This needs to be applied every time you restart the machine.
+
 ```bash
 kubectl apply -f - <<EOF
 kind: ConfigMap
@@ -305,6 +307,7 @@ kubectl hlf ca register --name=ord-ca --user=orderer --secret=ordererpw \
 ### Deploy orderer
 
 ```bash
+
 kubectl hlf ordnode create --image=$ORDERER_IMAGE --version=$ORDERER_VERSION \
     --storage-class=$STORAGE_CLASS --enroll-id=orderer --mspid=OrdererMSP \
     --enroll-pw=ordererpw --capacity=2Gi --name=ord-node1 --ca-name=ord-ca.default \
@@ -327,6 +330,7 @@ kubectl hlf ordnode create --image=$ORDERER_IMAGE --version=$ORDERER_VERSION \
     --enroll-pw=ordererpw --capacity=2Gi --name=ord-node4 --ca-name=ord-ca.default \
     --hosts=orderer3-ord.localho.st --admin-hosts=admin-orderer3-ord.localho.st --istio-port=443
 
+# 3/4
 
 kubectl wait --timeout=180s --for=condition=Running fabricorderernodes.hlf.kungfusoftware.es --all
 ```
@@ -355,11 +359,11 @@ kubectl hlf ca register --name=ord-ca --user=admin --secret=adminpw \
 
 kubectl hlf identity create --name orderer-admin-sign --namespace default \
     --ca-name ord-ca --ca-namespace default \
-    --ca ca --mspid OrdererMSP --enroll-id admin --enroll-secret adminpw
+    --ca ca --mspid OrdererMSP --enroll-id admin --enroll-secret adminpw # sign identity
 
 kubectl hlf identity create --name orderer-admin-tls --namespace default \
     --ca-name ord-ca --ca-namespace default \
-    --ca tlsca --mspid OrdererMSP --enroll-id admin --enroll-secret adminpw
+    --ca tlsca --mspid OrdererMSP --enroll-id admin --enroll-secret adminpw # tls identity
 
 ```
 
@@ -380,10 +384,10 @@ kubectl hlf identity create --name org1-admin --namespace default \
 ### Create main channel
 
 ```bash
-export PEER_ORG_SIGN_CERT=$(kubectl get fabriccas org1-ca -o=jsonpath='{.status.ca_cert}')
-export PEER_ORG_TLS_CERT=$(kubectl get fabriccas org1-ca -o=jsonpath='{.status.tlsca_cert}')
 export IDENT_12=$(printf "%16s" "")
+# tls CA certificate
 export ORDERER_TLS_CERT=$(kubectl get fabriccas ord-ca -o=jsonpath='{.status.tlsca_cert}' | sed -e "s/^/${IDENT_12}/" )
+
 export ORDERER0_TLS_CERT=$(kubectl get fabricorderernodes ord-node1 -o=jsonpath='{.status.tlsCert}' | sed -e "s/^/${IDENT_12}/" )
 export ORDERER1_TLS_CERT=$(kubectl get fabricorderernodes ord-node2 -o=jsonpath='{.status.tlsCert}' | sed -e "s/^/${IDENT_12}/" )
 export ORDERER2_TLS_CERT=$(kubectl get fabricorderernodes ord-node3 -o=jsonpath='{.status.tlsCert}' | sed -e "s/^/${IDENT_12}/" )
@@ -555,8 +559,118 @@ ${ORDERER2_TLS_CERT}
 ${ORDERER2_TLS_CERT}
 
 EOF
+```
+
+### Create main channel using ETCDRaft
+
+```bash
+export PEER_ORG_SIGN_CERT=$(kubectl get fabriccas org1-ca -o=jsonpath='{.status.ca_cert}')
+export PEER_ORG_TLS_CERT=$(kubectl get fabriccas org1-ca -o=jsonpath='{.status.tlsca_cert}')
+export IDENT_8=$(printf "%8s" "")
+export ORDERER_TLS_CERT=$(kubectl get fabriccas ord-ca -o=jsonpath='{.status.tlsca_cert}' | sed -e "s/^/${IDENT_8}/" )
+export ORDERER0_TLS_CERT=$(kubectl get fabricorderernodes ord-node1 -o=jsonpath='{.status.tlsCert}' | sed -e "s/^/${IDENT_8}/" )
+export ORDERER1_TLS_CERT=$(kubectl get fabricorderernodes ord-node2 -o=jsonpath='{.status.tlsCert}' | sed -e "s/^/${IDENT_8}/" )
+export ORDERER2_TLS_CERT=$(kubectl get fabricorderernodes ord-node3 -o=jsonpath='{.status.tlsCert}' | sed -e "s/^/${IDENT_8}/" )
+export ORDERER3_TLS_CERT=$(kubectl get fabricorderernodes ord-node4 -o=jsonpath='{.status.tlsCert}' | sed -e "s/^/${IDENT_8}/" )
+
+kubectl apply -f - <<EOF
+apiVersion: hlf.kungfusoftware.es/v1alpha1
+kind: FabricMainChannel
+metadata:
+  name: demo
+spec:
+  name: demo
+  adminOrdererOrganizations:
+    - mspID: OrdererMSP
+  adminPeerOrganizations:
+    - mspID: Org1MSP
+  channelConfig:
+    application:
+      acls: null
+      capabilities:
+        - V2_0
+      policies: null
+    capabilities:
+      - V2_0
+    orderer:
+      batchSize:
+        absoluteMaxBytes: 1048576
+        maxMessageCount: 10
+        preferredMaxBytes: 524288
+      batchTimeout: 2s
+      capabilities:
+        - V2_0
+      etcdRaft:
+        options:
+          electionTick: 10
+          heartbeatTick: 1
+          maxInflightBlocks: 5
+          snapshotIntervalSize: 16777216
+          tickInterval: 500ms
+      ordererType: etcdraft
+      policies: null
+      state: STATE_NORMAL
+    policies: null
+  externalOrdererOrganizations: []
+  peerOrganizations:
+    - mspID: Org1MSP
+      caName: "org1-ca"
+      caNamespace: "default"
+  identities:
+    OrdererMSP:
+      secretKey: user.yaml
+      secretName: orderer-admin-tls
+      secretNamespace: default
+    OrdererMSP-sign:
+      secretKey: user.yaml
+      secretName: orderer-admin-sign
+      secretNamespace: default
+    Org1MSP:
+      secretKey: user.yaml
+      secretName: org1-admin
+      secretNamespace: default
+  externalPeerOrganizations: []
+  ordererOrganizations:
+    - caName: "ord-ca"
+      caNamespace: "default"
+      externalOrderersToJoin:
+        - host: ord-node1
+          port: 7053
+        - host: ord-node2
+          port: 7053
+        - host: ord-node3
+          port: 7053
+        - host: ord-node4
+          port: 7053
+      mspID: OrdererMSP
+      ordererEndpoints:
+        - ord-node1:7050
+        - ord-node2:7050
+        - ord-node3:7050
+        - ord-node4:7050
+      orderersToJoin: []
+  orderers:
+    - host: ord-node1
+      port: 7050
+      tlsCert: |-
+${ORDERER0_TLS_CERT}
+    - host: ord-node2
+      port: 7050
+      tlsCert: |-
+${ORDERER1_TLS_CERT}
+    - host: ord-node3
+      port: 7050
+      tlsCert: |-
+${ORDERER2_TLS_CERT}
+    - host: ord-node4
+      port: 7050
+      tlsCert: |-
+${ORDERER3_TLS_CERT}
+
+EOF
 
 ```
+
 
 ## 7. Join peer to the channel
 
@@ -756,7 +870,9 @@ kubectl hlf chaincode invoke --config=org1.yaml \
     --chaincode=asset --channel=demo \
     --fcn=CreateAsset -a "asset7" -a blue -a "5" -a "tom" -a "100"
 ```
+
 # 13.2 Query the asset
+
 Query the asset we just created
 ```bash
 kubectl hlf chaincode query --config=org1.yaml \
